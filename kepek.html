@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="hu"> <!-- Magyar nyelv. -->
+<head> <!-- Head. -->
+  <meta charset="UTF-8" /> <!-- UTF-8. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" /> <!-- Reszponzív. -->
+  <title>Fotó-nézegető (FIX: map adat nem csúszik el)</title> <!-- Cím. -->
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" /> <!-- Font gyorsítás. -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /> <!-- Font gyorsítás. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet" /> <!-- Inter. -->
+
+  <script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.umd.js"></script> <!-- EXIF olvasó. -->
+
+  <style> /* CSS. */
+    :root { /* Változók. */
+      --bg0: #070a10; /* Háttér. */
+      --txt: #e8edf6; /* Szöveg. */
+      --muted: #a9b4c7; /* Halvány. */
+      --accent: #7c5cff; /* Akcent. */
+      --ok: #2dd4bf; /* Akcent 2. */
+      --radius: 22px; /* Lekerekítés. */
+      --shadow: 0 24px 80px rgba(0,0,0,.55); /* Árnyék. */
+      --pad: 18px; /* Viewer padding. */
+      --metaH: 76px; /* Meta célmagasság (dinamikusan frissül). */
+      --framePad: 10px; /* Színes keret vastagság. */
+      --innerPad: 10px; /* Belső padding. */
+      --imgRadius: 18px; /* Kép lekerekítés. */
+      --maxW: 1200px; /* Max szélesség. */
+    } /* root vége. */
+
+    * { box-sizing: border-box; } /* Méretezés. */
+    html, body { height: 100%; } /* Teljes magasság. */
+
+    body { /* Alap háttér. */
+      margin: 0; /* Margó 0. */
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; /* Font. */
+      color: var(--txt); /* Szín. */
+      background:
+        radial-gradient(1200px 800px at 30% 20%, rgba(124,92,255,.22), transparent 55%),
+        radial-gradient(1000px 700px at 75% 65%, rgba(45,212,191,.16), transparent 60%),
+        linear-gradient(180deg, var(--bg0), #020308 70%); /* Háttér. */
+    } /* body vége. */
+
+    #setup { /* Setup nézet. */
+      min-height: 100vh; /* Teljes magasság. */
+      display: grid; /* Középre. */
+      place-items: center; /* Középre. */
+      padding: 18px; /* Tér. */
+    } /* setup vége. */
+
+    .setupCard { /* Setup kártya. */
+      width: min(980px, 100%); /* Szélesség. */
+      background: rgba(255,255,255,.06); /* Üveg. */
+      border: 1px solid rgba(255,255,255,.12); /* Keret. */
+      border-radius: calc(var(--radius) + 6px); /* Lekerekítés. */
+      box-shadow: var(--shadow); /* Árnyék. */
+      overflow: hidden; /* Vágás. */
+    } /* setupCard vége. */
+
+    .setupTop { /* Setup header. */
+      padding: 18px 18px 10px; /* Tér. */
+      display: flex; /* Flex. */
+      align-items: center; /* Közép. */
+      justify-content: space-between; /* Szét. */
+      gap: 10px; /* Tér. */
+      flex-wrap: wrap; /* Tördelés. */
+    } /* setupTop vége. */
+
+    .brand { /* Brand. */
+      display: flex; /* Flex. */
+      gap: 10px; /* Tér. */
+      align-items: center; /* Közép. */
+    } /* brand vége. */
+
+    .dot { /* Pötty. */
+      width: 12px; /* Szélesség. */
+      height: 12px; /* Magasság. */
+      border-radius: 999px; /* Kör. */
+      background: linear-gradient(135deg, var(--accent), var(--ok)); /* Gradiens. */
+      box-shadow: 0 0 18px rgba(124,92,255,.42); /* Fény. */
+      flex: 0 0 auto; /* Fix. */
+    } /* dot vége. */
+
+    .title { /* Cím. */
+      font-weight: 800; /* Vastag. */
+      font-size: 16px; /* Méret. */
+      letter-spacing: .2px; /* Spacing. */
+    } /* title vége. */
+
+    .subtitle { /* Alcím. */
+      margin-top: 2px; /* Tér. */
+      font-size: 12px; /* Méret. */
+      color: var(--muted); /* Halvány. */
+      line-height: 1.45; /* Sorköz. */
+    } /* subtitle vége. */
+
+    .pillRow { /* Pill sor. */
+      display: flex; /* Flex. */
+      gap: 10px; /* Tér. */
+      align-items: center; /* Közép. */
+      flex-wrap: wrap; /* Tördel. */
+      justify-content: flex-end; /* Jobbra. */
+    } /* pillRow vége. */
+
+    .pill { /* Pill. */
+      padding: 7px 10px; /* Tér. */
+      border-radius: 999px; /* Kapszula. */
+      background: rgba(0,0,0,.20); /* Háttér. */
+      border: 1px solid rgba(255,255,255,.12); /* Keret. */
+      color: var(--muted); /* Szín. */
+      font-size: 12px; /* Méret. */
+      user-select: none; /* Ne jelöljön. */
+    } /* pill vége. */
+
+    .pill b { color: var(--txt); } /* Kiemelés. */
+
+    .setupBody { /* Setup body. */
+      padding: 0 18px 18px; /* Tér. */
+      display: grid; /* Rács. */
+      gap: 12px; /* Tér. */
+    } /* setupBody vége. */
+
+    .row { /* Sor. */
+      display: flex; /* Flex. */
+      gap: 10px; /* Tér. */
+      flex-wrap: wrap; /* Tördel. */
+      align-items: center; /* Közép. */
+    } /* row vége. */
+
+    .btn { /* Gomb. */
+      appearance: none; /* Natív off. */
+      border: 1px solid rgba(255,255,255,.14); /* Keret. */
+      background: rgba(255,255,255,.08); /* Üveg. */
+      color: var(--txt); /* Szín. */
+      padding: 10px 14px; /* Tér. */
+      border-radius: 14px; /* Lekerekítés. */
+      cursor: pointer; /* Mutató. */
+      font-weight: 600; /* Vastag. */
+      transition: transform .08s ease, background .2s ease, border-color .2s ease; /* Anim. */
+      user-select: none; /* Ne jelöljön. */
+    } /* btn vége. */
+
+    .btn:hover { /* Hover. */
+      background: rgba(255,255,255,.12); /* Erősebb. */
+      border-color: rgba(255,255,255,.22); /* Erősebb. */
+    } /* hover vége. */
+
+    .btn:active { transform: translateY(1px); } /* Press. */
+
+    .btn.primary { /* Primary. */
+      border: 1px solid rgba(124,92,255,.45); /* Keret. */
+      background: linear-gradient(135deg, rgba(124,92,255,.33), rgba(45,212,191,.18)); /* Gradiens. */
+    } /* primary vége. */
+
+    .btn.danger { /* Danger. */
+      border: 1px solid rgba(251,113,133,.40); /* Keret. */
+      background: rgba(251,113,133,.10); /* Háttér. */
+    } /* danger vége. */
+
+    .hint { /* Hint. */
+      color: var(--muted); /* Halvány. */
+      font-size: 12px; /* Méret. */
+      line-height: 1.45; /* Sorköz. */
+    } /* hint vége. */
+
+    .log { /* Log. */
+      background: rgba(0,0,0,.22); /* Háttér. */
+      border: 1px solid rgba(255,255,255,.10); /* Keret. */
+      border-radius: 16px; /* Lekerekítés. */
+      padding: 12px; /* Tér. */
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; /* Monospace. */
+      font-size: 12px; /* Méret. */
+      color: #d9e2f5; /* Szín. */
+      white-space: pre-wrap; /* Tördelés. */
+      max-height: 170px; /* Limit. */
+      overflow: auto; /* Scroll. */
+    } /* log vége. */
+
+    .kbd { /* KBD. */
+      font-size: 11px; /* Méret. */
+      color: var(--muted); /* Halvány. */
+      padding: 7px 10px; /* Tér. */
+      border: 1px solid rgba(255,255,255,.12); /* Keret. */
+      border-radius: 999px; /* Kapszula. */
+      background: rgba(255,255,255,.06); /* Üveg. */
+      user-select: none; /* Ne jelöljön. */
+    } /* kbd vége. */
+
+    #viewer { /* Viewer. */
+      position: fixed; /* Fix. */
+      inset: 0; /* Teljes. */
+      display: none; /* Rejtve. */
+      padding: var(--pad); /* Padding. */
+      overflow: auto; /* Scroll biztonság. */
+      -webkit-overflow-scrolling: touch; /* Mobil. */
+    } /* viewer vége. */
+
+    .stage { /* Színpad. */
+      width: min(var(--maxW), 100%); /* Szélesség. */
+      margin: 0 auto; /* Közép. */
+      display: grid; /* Rács. */
+      gap: 10px; /* Tér. */
+      grid-template-rows: auto auto; /* Kép + meta. */
+      align-items: center; /* Közép. */
+      justify-items: center; /* Közép. */
+      min-height: calc(100dvh - (2 * var(--pad))); /* Min. */
+    } /* stage vége. */
+
+    .frame { /* IG keret. */
+      width: 100%; /* Teljes. */
+      border-radius: calc(var(--radius) + 10px); /* Lekerekítés. */
+      padding: var(--framePad); /* Keret. */
+      background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af, #515bd4); /* Gradiens. */
+      box-shadow: var(--shadow); /* Árnyék. */
+      display: grid; /* Grid. */
+      place-items: center; /* Közép. */
+    } /* frame vége. */
+
+    .inner { /* Belső. */
+      width: 100%; /* Teljes. */
+      border-radius: var(--radius); /* Lekerekítés. */
+      background: rgba(10,14,22,.92); /* Sötét. */
+      border: 1px solid rgba(255,255,255,.12); /* Keret. */
+      padding: var(--innerPad); /* Padding. */
+      display: grid; /* Grid. */
+      place-items: center; /* Közép. */
+    } /* inner vége. */
+
+    img#photo { /* Kép. */
+      width: auto; /* Auto. */
+      height: auto; /* Auto. */
+      max-width: 100%; /* Szélesség limit. */
+      max-height: calc(100dvh - (2 * var(--pad)) - var(--metaH) - (2 * var(--framePad)) - (2 * var(--innerPad)) - 22px); /* Magasság limit. */
+      object-fit: contain; /* Aránytartó. */
+      border-radius: var(--imgRadius); /* Lekerekítés. */
+      background: rgba(0,0,0,.18); /* Háttér. */
+      display: block; /* Block. */
+    } /* img vége. */
+
+    .metaBar { /* Meta sáv. */
+      width: 100%; /* Teljes. */
+      display: flex; /* Flex. */
+      align-items: center; /* Közép. */
+      justify-content: space-between; /* Szét. */
+      gap: 10px; /* Tér. */
+      flex-wrap: wrap; /* Tördel. */
+      padding: 10px 12px; /* Tér. */
+      border-radius: 16px; /* Lekerekítés. */
+      background: rgba(0,0,0,.30); /* Üveg. */
+      border: 1px solid rgba(255,255,255,.12); /* Keret. */
+      backdrop-filter: blur(10px); /* Blur. */
+      min-height: var(--metaH); /* Minimum. */
+    } /* metaBar vége. */
+
+    .metaLeft { /* Bal meta. */
+      display: grid; /* Sorok. */
+      gap: 2px; /* Tér. */
+      min-width: 240px; /* Min. */
+    } /* metaLeft vége. */
+
+    .metaLine { /* Sor. */
+      font-size: 12px; /* Méret. */
+      color: rgba(233,238,248,.86); /* Szín. */
+      line-height: 1.35; /* Sorköz. */
+      word-break: break-word; /* Törés. */
+    } /* metaLine vége. */
+
+    .metaLine b { /* Kiemelés. */
+      color: var(--txt); /* Szín. */
+      font-weight: 800; /* Vastag. */
+    } /* b vége. */
+
+    .metaLine a { /* Link. */
+      color: #cfe7ff; /* Kék. */
+      text-decoration: none; /* Nincs. */
+      border-bottom: 1px dashed rgba(207,231,255,.45); /* Jelzés. */
+    } /* a vége. */
+
+    .metaLine a:hover { border-bottom-color: rgba(207,231,255,.85); } /* Hover. */
+
+    .nav { /* Nav. */
+      display: flex; /* Flex. */
+      gap: 8px; /* Tér. */
+      align-items: center; /* Közép. */
+      flex: 0 0 auto; /* Fix. */
+    } /* nav vége. */
+
+    .exitHint { /* Tipp. */
+      position: fixed; /* Fix. */
+      right: 14px; /* Jobb. */
+      bottom: 12px; /* Alsó. */
+      padding: 8px 10px; /* Tér. */
+      border-radius: 999px; /* Kapszula. */
+      background: rgba(0,0,0,.25); /* Üveg. */
+      border: 1px solid rgba(255,255,255,.10); /* Keret. */
+      color: rgba(233,238,248,.70); /* Halvány. */
+      font-size: 11px; /* Méret. */
+      user-select: none; /* Ne jelöljön. */
+      pointer-events: none; /* Ne zavarjon. */
+    } /* exitHint vége. */
+
+    @media (max-width: 680px) { /* Mobil. */
+      :root { --metaH: 90px; } /* Több sor. */
+    } /* media vége. */
+  </style> <!-- CSS vége. -->
+</head> <!-- Head vége. -->
+<body> <!-- Body. -->
+
+  <section id="setup"> <!-- Setup. -->
+    <div class="setupCard"> <!-- Kártya. -->
+      <div class="setupTop"> <!-- Header. -->
+        <div class="brand"> <!-- Brand. -->
+          <div class="dot"></div> <!-- Dot. -->
+          <div> <!-- Szöveg. -->
+            <div class="title">Fotó-nézegető</div> <!-- Cím. -->
+            <div class="subtitle">FIX: a térképadat <b>nem csúszik el</b>, mindig csak az aktuális kép írhatja ki a helyet.</div> <!-- Alcím. -->
+          </div> <!-- Szöveg vége. -->
+        </div> <!-- Brand vége. -->
+        <div class="pillRow"> <!-- Státusz. -->
+          <div class="pill">Képek: <b id="count">0</b></div> <!-- Darab. -->
+          <div class="pill">Aktuális: <b id="index">-</b></div> <!-- Index. -->
+          <div class="pill">Helynév: <b id="geoState">-</b></div> <!-- Geo. -->
+        </div> <!-- pillRow vége. -->
+      </div> <!-- setupTop vége. -->
+
+      <div class="setupBody"> <!-- Body. -->
+        <div class="row"> <!-- Gombok. -->
+          <button class="btn primary" id="btnPick">📁 Mappa kiválasztása</button> <!-- Pick. -->
+          <button class="btn" id="btnStart" disabled>▶ Megjelenítés</button> <!-- Start. -->
+          <button class="btn danger" id="btnReset" disabled>⟲ Reset</button> <!-- Reset. -->
+          <span class="kbd">←/→ • Space/Enter • katt = köv • Esc = vissza</span> <!-- Hint. -->
+        </div> <!-- row vége. -->
+
+        <div class="hint"> <!-- Hint. -->
+          A településnévhez reverse geocode fut (OpenStreetMap Nominatim). Ha nem kell: <b>BEALLITAS.reverseGeocode = false</b>. <!-- Hint. -->
+        </div> <!-- hint vége. -->
+
+        <input id="fallbackFolder" type="file" webkitdirectory multiple accept="image/jpeg" style="display:none" /> <!-- Fallback. -->
+        <div class="log" id="log">Készen állok. Válassz egy mappát JPG képekkel.</div> <!-- Log. -->
+      </div> <!-- setupBody vége. -->
+    </div> <!-- setupCard vége. -->
+  </section> <!-- setup vége. -->
+
+  <section id="viewer"> <!-- Viewer. -->
+    <div class="stage"> <!-- Stage. -->
+      <div class="frame"> <!-- Frame. -->
+        <div class="inner" id="imageWrap"> <!-- Katt. -->
+          <img id="photo" alt="Kiválasztott fotó" /> <!-- Kép. -->
+        </div> <!-- inner vége. -->
+      </div> <!-- frame vége. -->
+
+      <div class="metaBar" id="metaBar"> <!-- Meta. -->
+        <div class="metaLeft"> <!-- Bal meta. -->
+          <div class="metaLine">📄 <b id="fileName">-</b></div> <!-- Név. -->
+          <div class="metaLine">🕒 Készült: <b id="takenAt">-</b></div> <!-- Dátum. -->
+          <div class="metaLine">📍 Hely: <span id="place">-</span></div> <!-- Hely. -->
+        </div> <!-- metaLeft vége. -->
+        <div class="nav"> <!-- Nav. -->
+          <button class="btn" id="btnPrev" disabled>←</button> <!-- Prev. -->
+          <button class="btn" id="btnNext" disabled>→</button> <!-- Next. -->
+        </div> <!-- nav vége. -->
+      </div> <!-- metaBar vége. -->
+    </div> <!-- stage vége. -->
+    <div class="exitHint">Esc = vissza • katt/space/enter = köv • ←/→ = nav</div> <!-- Tipp. -->
+  </section> <!-- viewer vége. -->
+
+  <script> // JS. //
+    "use strict"; // Strict. //
+
+    const BEALLITAS = { // Konfig. //
+      reverseGeocode: true, // Helynév lekérés. //
+      sortByName: true // Rendezés. //
+    }; // Konfig vége. //
+
+    const elCount = document.getElementById("count"); // Képszám. //
+    const elIndex = document.getElementById("index"); // Index. //
+    const elGeoState = document.getElementById("geoState"); // Geo állapot. //
+    const elLog = document.getElementById("log"); // Log. //
+
+    const setup = document.getElementById("setup"); // Setup. //
+    const viewer = document.getElementById("viewer"); // Viewer. //
+    const metaBar = document.getElementById("metaBar"); // MetaBar. //
+
+    const btnPick = document.getElementById("btnPick"); // Pick. //
+    const btnStart = document.getElementById("btnStart"); // Start. //
+    const btnReset = document.getElementById("btnReset"); // Reset. //
+    const btnPrev = document.getElementById("btnPrev"); // Prev. //
+    const btnNext = document.getElementById("btnNext"); // Next. //
+
+    const fallbackFolder = document.getElementById("fallbackFolder"); // Fallback. //
+    const imageWrap = document.getElementById("imageWrap"); // Katt terület. //
+    const imgPhoto = document.getElementById("photo"); // Kép. //
+
+    const elFileName = document.getElementById("fileName"); // Fájlnév. //
+    const elTakenAt = document.getElementById("takenAt"); // Dátum. //
+    const elPlace = document.getElementById("place"); // Hely. //
+
+    let files = []; // Fájl lista. //
+    let currentIndex = 0; // Index. //
+    let currentObjectUrl = null; // Object URL. //
+
+    let activeViewToken = 0; // <<< EZ A LÉNYEG: minden showImage kap egy token-t >>> //
+    let activeGeoAbort = null; // <<< Ez abortolja a futó geocode-ot >>> //
+
+    function log(msg) { // Log. //
+      const ts = new Date().toLocaleTimeString(); // Idő. //
+      elLog.textContent = `[${ts}] ${msg}\n` + elLog.textContent; // Elölre. //
+    } // log vége. //
+
+    function setCounts() { // UI. //
+      elCount.textContent = String(files.length); // Darab. //
+      elIndex.textContent = files.length ? `${currentIndex + 1}/${files.length}` : "-"; // Index. //
+    } // setCounts vége. //
+
+    function safeReleaseObjectUrl() { // URL felszabadítás. //
+      if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; } // Revoke. //
+    } // safeReleaseObjectUrl vége. //
+
+    function isJpgFile(file) { // JPG check. //
+      const nameOk = /\.jpe?g$/i.test(file.name); // Ext. //
+      const typeOk = (file.type === "image/jpeg" || file.type === "image/jpg" || file.type === ""); // MIME. //
+      return nameOk && typeOk; // Ok. //
+    } // isJpgFile vége. //
+
+    function sortFiles(list) { // Sort. //
+      if (!BEALLITAS.sortByName) return list; // Ha nem kell. //
+      return list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })); // Sort. //
+    } // sortFiles vége. //
+
+    function filterFiles(list) { // Szűrés. //
+      return list.filter(isJpgFile); // JPG. //
+    } // filterFiles vége. //
+
+    function setReadyState(ready) { // Start/Reset. //
+      btnStart.disabled = !ready; // Start. //
+      btnReset.disabled = !ready; // Reset. //
+    } // setReadyState vége. //
+
+    function enableNavUi() { // Nav. //
+      btnPrev.disabled = (currentIndex <= 0); // Prev. //
+      btnNext.disabled = (currentIndex >= files.length - 1); // Next. //
+    } // enableNavUi vége. //
+
+    function clampIndex(i) { // Clamp. //
+      if (!files.length) return 0; // Nincs. //
+      if (i < 0) return 0; // Min. //
+      if (i >= files.length) return files.length - 1; // Max. //
+      return i; // Ok. //
+    } // clampIndex vége. //
+
+    function formatDate(d) { // Dátum. //
+      if (!d || !(d instanceof Date) || isNaN(d.getTime())) return "-"; // Nincs. //
+      return d.toLocaleString(undefined, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); // Format. //
+    } // formatDate vége. //
+
+    function escapeHtml(s) { // Escape. //
+      return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); // Escape. //
+    } // escapeHtml vége. //
+
+    function normalizeCoord(x) { // Kerekítés. //
+      return Math.round(x * 100000) / 100000; // 5 tizedes. //
+    } // normalizeCoord vége. //
+
+    function buildGoogleMapsLink(lat, lon) { // GMaps. //
+      return `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lon}`)}`; // Link. //
+    } // buildGoogleMapsLink vége. //
+
+    async function readExifForCurrent(file) { // EXIF olvasás. //
+      try { // Try. //
+        const data = await exifr.parse(file, { tiff: true, exif: true, gps: true }); // Parse. //
+        return data || {}; // Vissza. //
+      } catch { // Catch. //
+        return {}; // Üres. //
+      } // catch vége. //
+    } // readExifForCurrent vége. //
+
+    async function reverseGeocodeForCurrent(lat, lon, signal) { // Reverse geocode. //
+      const nlat = normalizeCoord(lat); // Lat. //
+      const nlon = normalizeCoord(lon); // Lon. //
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(nlat)}&lon=${encodeURIComponent(nlon)}`; // URL. //
+      const res = await fetch(url, { method: "GET", headers: { "Accept": "application/json" }, signal }); // Fetch + abort. //
+      if (!res.ok) throw new Error(`HTTP ${res.status}`); // Hiba. //
+      const json = await res.json(); // JSON. //
+      const place = (json && (json.name || json.display_name)) ? (json.name || json.display_name) : null; // Hely. //
+      return place; // Vissza. //
+    } // reverseGeocodeForCurrent vége. //
+
+    function updateDynamicMetaH() { // Meta magasság frissítés. //
+      const h = metaBar.getBoundingClientRect().height; // Mérés. //
+      document.documentElement.style.setProperty("--metaH", `${Math.ceil(h)}px`); // CSS változó. //
+    } // updateDynamicMetaH vége. //
+
+    async function showImage(i) { // Kép megjelenítés. //
+      if (!files.length) return; // Nincs. //
+
+      activeViewToken += 1; // <<< ÚJ TOKEN: ettől kezdve csak ez írhatja a UI-t >>> //
+      const myToken = activeViewToken; // Token mentés. //
+
+      if (activeGeoAbort) { try { activeGeoAbort.abort(); } catch {} } // <<< Előző geocode megszakítás >>> //
+      activeGeoAbort = null; // Nulláz. //
+
+      currentIndex = clampIndex(i); // Clamp. //
+      setCounts(); // UI. //
+      enableNavUi(); // Nav. //
+
+      const file = files[currentIndex]; // Aktuális fájl. //
+
+      elFileName.textContent = file.name; // Név. //
+      elTakenAt.textContent = "…"; // Tölt. //
+      elPlace.textContent = "…"; // Tölt. //
+      elGeoState.textContent = BEALLITAS.reverseGeocode ? "készen" : "kikapcsolva"; // State. //
+
+      updateDynamicMetaH(); // MetaH előzetes. //
+
+      safeReleaseObjectUrl(); // URL eldob. //
+      currentObjectUrl = URL.createObjectURL(file); // URL. //
+      imgPhoto.src = currentObjectUrl; // Kép. //
+
+      const meta = await readExifForCurrent(file); // EXIF. //
+      if (myToken !== activeViewToken) return; // <<< Ha közben továbbléptél: STOP >>> //
+
+      const dt = meta.DateTimeOriginal || meta.CreateDate || meta.ModifyDate || meta.DateTimeDigitized || null; // Dátum mezők. //
+      const dateObj = (dt instanceof Date) ? dt : (dt ? new Date(dt) : null); // Date. //
+      elTakenAt.textContent = formatDate(dateObj); // Dátum. //
+
+      const lat = meta.latitude; // Lat. //
+      const lon = meta.longitude; // Lon. //
+
+      if (typeof lat === "number" && typeof lon === "number") { // GPS van. //
+        const nlat = normalizeCoord(lat); // Norm. //
+        const nlon = normalizeCoord(lon); // Norm. //
+        const gmaps = buildGoogleMapsLink(nlat, nlon); // Link. //
+
+        if (!BEALLITAS.reverseGeocode) { // Ha nincs reverse. //
+          elPlace.innerHTML = `${escapeHtml(`${nlat}, ${nlon}`)} • <a href="${gmaps}" target="_blank" rel="noopener">Google Maps</a>`; // Koord + link. //
+          requestAnimationFrame(updateDynamicMetaH); // MetaH frissítés. //
+          return; // Kész. //
+        } // reverse off vége. //
+
+        elGeoState.textContent = "lekérés…"; // State. //
+
+        const ac = new AbortController(); // Abort controller. //
+        activeGeoAbort = ac; // Aktív mentése. //
+
+        try { // Try. //
+          const placeName = await reverseGeocodeForCurrent(nlat, nlon, ac.signal); // Reverse. //
+          if (myToken !== activeViewToken) return; // <<< Ha közben továbbléptél: STOP >>> //
+
+          elGeoState.textContent = placeName ? "ok" : "nincs"; // State. //
+
+          if (placeName) { // Van hely. //
+            elPlace.innerHTML = `<b>${escapeHtml(placeName)}</b> • <a href="${gmaps}" target="_blank" rel="noopener">Google Maps</a>`; // Hely + link. //
+          } else { // Nincs. //
+            elPlace.innerHTML = `${escapeHtml(`${nlat}, ${nlon}`)} • <a href="${gmaps}" target="_blank" rel="noopener">Google Maps</a>`; // Koord + link. //
+          } // if vége. //
+        } catch (e) { // Catch. //
+          if (myToken !== activeViewToken) return; // <<< Ha közben továbbléptél: STOP >>> //
+          if (e && e.name === "AbortError") { // Abort. //
+            elGeoState.textContent = "megszakítva"; // State. //
+          } else { // Egyéb. //
+            elGeoState.textContent = "hiba"; // State. //
+            elPlace.innerHTML = `${escapeHtml(`${nlat}, ${nlon}`)} • <a href="${gmaps}" target="_blank" rel="noopener">Google Maps</a>`; // Fallback. //
+          } // else vége. //
+        } finally { // Finally. //
+          if (activeGeoAbort === ac) activeGeoAbort = null; // Csak akkor nulláz, ha ez volt az aktív. //
+          requestAnimationFrame(updateDynamicMetaH); // MetaH frissítés. //
+        } // try/catch vége. //
+      } else { // Nincs GPS. //
+        elPlace.textContent = "Nincs GPS adat az EXIF-ben."; // Jelzés. //
+        requestAnimationFrame(updateDynamicMetaH); // MetaH frissítés. //
+      } // GPS vége. //
+    } // showImage vége. //
+
+    async function startViewer() { // Indítás. //
+      if (!files.length) { log("Nincs mit megjeleníteni – válassz mappát!"); return; } // Nincs. //
+      setup.style.display = "none"; // Setup el. //
+      viewer.style.display = "block"; // Viewer be. //
+      await showImage(0); // Első. //
+    } // startViewer vége. //
+
+    function exitViewer() { // Kilépés. //
+      if (activeGeoAbort) { try { activeGeoAbort.abort(); } catch {} } // Futó fetch stop. //
+      activeGeoAbort = null; // Null. //
+      viewer.style.display = "none"; // Viewer el. //
+      setup.style.display = "grid"; // Setup be. //
+      safeReleaseObjectUrl(); // URL eldob. //
+      log("Visszaléptél a setup nézetre (Esc)."); // Log. //
+    } // exitViewer vége. //
+
+    async function nextImage() { // Következő. //
+      if (!files.length) return; // Nincs. //
+      if (currentIndex >= files.length - 1) return; // Végén. //
+      await showImage(currentIndex + 1); // Next. //
+    } // nextImage vége. //
+
+    async function prevImage() { // Előző. //
+      if (!files.length) return; // Nincs. //
+      if (currentIndex <= 0) return; // Elején. //
+      await showImage(currentIndex - 1); // Prev. //
+    } // prevImage vége. //
+
+    function resetAll() { // Reset. //
+      if (activeGeoAbort) { try { activeGeoAbort.abort(); } catch {} } // Futó fetch stop. //
+      activeGeoAbort = null; // Null. //
+      activeViewToken += 1; // Token ugrik, így minden futó async “érvénytelen”. //
+      safeReleaseObjectUrl(); // URL eldob. //
+      files = []; // Üres. //
+      currentIndex = 0; // 0. //
+      setCounts(); // UI. //
+      setReadyState(false); // Gombok. //
+      btnPrev.disabled = true; // Prev. //
+      btnNext.disabled = true; // Next. //
+      elGeoState.textContent = "-"; // State. //
+      elFileName.textContent = "-"; // Meta. //
+      elTakenAt.textContent = "-"; // Meta. //
+      elPlace.textContent = "-"; // Meta. //
+      log("Reset kész. Válassz új mappát."); // Log. //
+    } // resetAll vége. //
+
+    async function pickFolder() { // Pick. //
+      resetAll(); // Tiszta. //
+      if ("showDirectoryPicker" in window) { // API. //
+        try { // Try. //
+          log("Directory Picker: mappa kiválasztása…"); // Log. //
+          const dirHandle = await window.showDirectoryPicker({ mode: "read" }); // Pick. //
+          const temp = []; // Gyűjtő. //
+          for await (const entry of dirHandle.values()) { // Bejárás. //
+            if (entry.kind === "file") temp.push(await entry.getFile()); // File. //
+          } // for. //
+          files = sortFiles(filterFiles(temp)); // Szűrés+sort. //
+          if (!files.length) { log("Nem találtam JPG képet ebben a mappában."); setReadyState(false); return; } // Nincs. //
+          setCounts(); // UI. //
+          setReadyState(true); // Engedély. //
+          elGeoState.textContent = BEALLITAS.reverseGeocode ? "készen" : "kikapcsolva"; // State. //
+          log(`Beolvasva: ${files.length} db JPG. Kattints: “Megjelenítés”.`); // Log. //
+          return; // Kész. //
+        } catch { // Catch. //
+          log("Mappa kiválasztása megszakítva. Fallback indul…"); // Log. //
+        } // catch. //
+      } // if. //
+      log("Fallback: mappa kiválasztása (webkitdirectory)…"); // Log. //
+      fallbackFolder.value = ""; // Reset. //
+      fallbackFolder.click(); // Click. //
+    } // pickFolder vége. //
+
+    fallbackFolder.addEventListener("change", () => { // Fallback change. //
+      const list = Array.from(fallbackFolder.files || []); // Array. //
+      files = sortFiles(filterFiles(list)); // Szűrés+sort. //
+      if (!files.length) { log("Fallback: nem találtam JPG képet."); setReadyState(false); return; } // Nincs. //
+      setCounts(); // UI. //
+      setReadyState(true); // Engedély. //
+      elGeoState.textContent = BEALLITAS.reverseGeocode ? "készen" : "kikapcsolva"; // State. //
+      log(`Fallback beolvasás kész: ${files.length} db JPG. Kattints: “Megjelenítés”.`); // Log. //
+    }); // listener. //
+
+    btnPick.addEventListener("click", pickFolder); // Pick. //
+    btnStart.addEventListener("click", startViewer); // Start. //
+    btnReset.addEventListener("click", resetAll); // Reset. //
+
+    btnNext.addEventListener("click", nextImage); // Next. //
+    btnPrev.addEventListener("click", prevImage); // Prev. //
+    imageWrap.addEventListener("click", () => { nextImage(); }); // Katt = next. //
+
+    window.addEventListener("resize", () => { if (viewer.style.display !== "none") updateDynamicMetaH(); }); // Resize. //
+
+    document.addEventListener("keydown", (e) => { // Key. //
+      const inViewer = (viewer.style.display !== "none"); // Viewer-e. //
+      if (!inViewer) return; // Ha nem. //
+      if (e.key === "ArrowRight") { e.preventDefault(); nextImage(); } // Jobb. //
+      else if (e.key === "ArrowLeft") { e.preventDefault(); prevImage(); } // Bal. //
+      else if (e.key === " " || e.key === "Enter") { e.preventDefault(); nextImage(); } // Space/Enter. //
+      else if (e.key === "Escape") { e.preventDefault(); exitViewer(); } // Esc. //
+    }); // keydown. //
+
+    log("FIX kész: token + AbortController → a helyadat mindig az aktuális képre tartozik, nem csúszik el."); // Induló log. //
+  </script> <!-- JS vége. -->
+</body> <!-- Body vége. -->
+</html> <!-- HTML vége. -->
